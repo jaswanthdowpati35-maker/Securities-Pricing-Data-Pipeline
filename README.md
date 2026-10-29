@@ -8,13 +8,25 @@ Automated end-of-day (EOD) US stock pricing pipeline built with **Apache Airflow
 
 ```mermaid
 flowchart LR
-    A["Massive API<br/>grouped daily bars"] --> B["Extract<br/>Python, CSV per trading day"]
-    B --> C["Validate"]
-    C --> D["Stage to S3"]
-    D --> E[("Snowflake RAW<br/>RAW_EOD_PRICES")]
-    E -->|"MERGE upsert, dedup by symbol and trade date"| F[("CORE<br/>EOD_PRICES")]
-    F --> G["DM_DIM<br/>DIM_SECURITY, DIM_DATE"]
-    F --> H["DM_FACT<br/>FACT_DAILY_PRICE"]
+    API["Massive API<br/>grouped daily bars"]
+
+    subgraph AF["Apache Airflow DAG: Mon-Fri 21:05 UTC (retries + fail-fast per stage)"]
+        direction LR
+        T1["1. Extract<br/>Python, CSV per trading day"] --> T2["2. Validate"]
+        T2 --> T3["3. Stage to S3"]
+        T3 --> T4["4. Load to Snowflake"]
+    end
+
+    API --> T1
+
+    subgraph SF["Snowflake"]
+        direction LR
+        RAW[("RAW<br/>RAW_EOD_PRICES")] -->|"MERGE upsert, dedup by symbol and trade date"| CORE[("CORE<br/>EOD_PRICES")]
+        CORE --> DIM["DM_DIM<br/>DIM_SECURITY, DIM_DATE"]
+        CORE --> FACT["DM_FACT<br/>FACT_DAILY_PRICE"]
+    end
+
+    T4 --> RAW
 ```
 
 ## Key features
